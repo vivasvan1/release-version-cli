@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "release-version-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "Safe GitHub release version bumper for Python and Node projects."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import re
 import subprocess
 
 
 def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> str:
+    change_commits = _change_commits(commits)
     changes = ""
-    if use_ai and commits:
-        changes = _ollama_changes(commits, model)
+    if use_ai and change_commits:
+        changes = _ollama_changes(change_commits, model)
     if not changes:
-        changes = _deterministic_changes(commits)
+        changes = _deterministic_changes(change_commits)
     return changes.rstrip() + "\n\n## Commits\n\n" + _commit_lines(commits) + "\n"
 
 
@@ -49,8 +51,8 @@ def _ollama_prompt(commits: list[str]) -> str:
         "### Docs\n- ...\n\n"
         "### Maintenance\n- ...\n\n"
         "### Other\n- ...\n\n"
-        "Use only these commits. Omit empty categories. No intro.\n\n"
-        + "\n".join(commits)
+        "Use only these commit subjects. Omit empty categories. No intro.\n\n"
+        + "\n".join(f"- {_subject(commit)}" for commit in commits)
     )
 
 
@@ -64,7 +66,7 @@ def _deterministic_changes(commits: list[str]) -> str:
         "Other": [],
     }
     for commit in commits:
-        subject = commit.split(" ", 1)[1] if " " in commit else commit
+        subject = _subject(commit)
         lowered = subject.lower()
         if lowered.startswith(("feat:", "feature:")):
             groups["Features"].append(_clean_subject(subject))
@@ -91,6 +93,19 @@ def _deterministic_changes(commits: list[str]) -> str:
     if not wrote_group:
         lines.extend(["### Other", "- No commit subjects found.", ""])
     return "\n".join(lines).rstrip()
+
+
+def _change_commits(commits: list[str]) -> list[str]:
+    return [commit for commit in commits if not _is_release_bookkeeping(commit)]
+
+
+def _is_release_bookkeeping(commit: str) -> bool:
+    subject = _subject(commit).lower()
+    return bool(re.fullmatch(r"chore: release v\d+\.\d+\.\d+", subject))
+
+
+def _subject(commit: str) -> str:
+    return commit.split(" ", 1)[1] if " " in commit else commit
 
 
 def _commit_lines(commits: list[str]) -> str:
