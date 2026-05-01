@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 import subprocess
 
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
 
 def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> str:
     change_commits = _change_commits(commits)
@@ -18,7 +20,7 @@ def _ollama_changes(commits: list[str], model: str) -> str:
     prompt = _ollama_prompt(commits)
     try:
         result = subprocess.run(
-            ["ollama", "run", model],
+            ["ollama", "run", "--nowordwrap", model],
             input=prompt,
             text=True,
             stdout=subprocess.PIPE,
@@ -28,10 +30,18 @@ def _ollama_changes(commits: list[str], model: str) -> str:
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
-    output = result.stdout.strip()
-    if result.returncode != 0 or not output.startswith("## Changes"):
+    output = _extract_changes_markdown(result.stdout)
+    if result.returncode != 0 or not output:
         return ""
     return output
+
+
+def _extract_changes_markdown(output: str) -> str:
+    cleaned = ANSI_ESCAPE_RE.sub("", output).strip()
+    start = cleaned.rfind("## Changes")
+    if start == -1:
+        return ""
+    return cleaned[start:].strip()
 
 
 def _ollama_prompt(commits: list[str]) -> str:

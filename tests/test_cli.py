@@ -4,7 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from release_version_cli.changelog import _ollama_prompt, build_release_notes
+from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes
 from release_version_cli.cli import main
 
 
@@ -126,6 +126,24 @@ def test_release_bookkeeping_is_not_summarized_as_a_change():
     assert "Release v0.3.6" not in changes
     assert "Auto maximum use of gpu" in changes
     assert "<release> chore: release v0.3.6" in notes
+
+
+def test_extract_changes_markdown_keeps_model_output_after_thinking_text():
+    output = (
+        "Thinking...\n"
+        "planning around ## Changes and headings\n"
+        "some chain of thought with terminal control \x1b[4D\x1b[K\n"
+        "...done thinking.\n\n"
+        "## Changes\n\n"
+        "### Features\n"
+        "- Introduces clearer release notes.\n"
+    )
+
+    assert _extract_changes_markdown(output) == (
+        "## Changes\n\n"
+        "### Features\n"
+        "- Introduces clearer release notes."
+    )
 
 
 def run(cmd: list[str], cwd: Path) -> str:
