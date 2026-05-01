@@ -13,15 +13,7 @@ def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool 
 
 
 def _ollama_changes(commits: list[str], model: str) -> str:
-    prompt = (
-        "Generate concise GitHub release notes in this exact markdown shape:\n"
-        "## Changes\n\n"
-        "### Features\n- ...\n\n"
-        "### Fixes\n- ...\n\n"
-        "### Other\n- ...\n\n"
-        "Use only these commits. Omit empty categories. No intro.\n\n"
-        + "\n".join(commits)
-    )
+    prompt = _ollama_prompt(commits)
     try:
         result = subprocess.run(
             ["ollama", "run", model],
@@ -38,6 +30,28 @@ def _ollama_changes(commits: list[str], model: str) -> str:
     if result.returncode != 0 or not output.startswith("## Changes"):
         return ""
     return output
+
+
+def _ollama_prompt(commits: list[str]) -> str:
+    return (
+        "Generate concise, human-written GitHub release notes from commit subjects.\n"
+        "Write for project users and maintainers who want to understand the impact of the change.\n"
+        "Translate terse commit messages into clear outcomes in different words.\n"
+        "Do not copy commit subjects verbatim unless a product name, API name, flag, file path, or version must stay exact.\n"
+        "Do not mention commit hashes.\n"
+        "Ignore synthetic release bookkeeping commits such as '<release> chore: release vX.Y.Z'.\n"
+        "Use only evidence from these commits. Be specific when the subject provides enough context, but do not invent details.\n\n"
+        "Use this exact markdown shape:\n"
+        "## Changes\n\n"
+        "### Features\n- ...\n\n"
+        "### Fixes\n- ...\n\n"
+        "### Performance\n- ...\n\n"
+        "### Docs\n- ...\n\n"
+        "### Maintenance\n- ...\n\n"
+        "### Other\n- ...\n\n"
+        "Use only these commits. Omit empty categories. No intro.\n\n"
+        + "\n".join(commits)
+    )
 
 
 def _deterministic_changes(commits: list[str]) -> str:

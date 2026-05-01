@@ -4,6 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from release_version_cli.changelog import _ollama_prompt
 from release_version_cli.cli import main
 
 
@@ -101,6 +102,17 @@ def test_ollama_failure_falls_back_to_deterministic_notes(tmp_path, monkeypatch)
     assert "### Fixes" in result.output
     assert "Handle ollama outage" in result.output
     assert "fix: handle ollama outage" in result.output
+
+
+def test_ollama_prompt_asks_for_human_release_notes_without_release_bookkeeping():
+    prompt = _ollama_prompt(["<release> chore: release v0.3.6", "04b6890 auto maximum use of gpu"])
+
+    assert "human-written GitHub release notes" in prompt
+    assert "Translate terse commit messages into clear outcomes in different words" in prompt
+    assert "Do not copy commit subjects verbatim" in prompt
+    assert "Ignore synthetic release bookkeeping commits" in prompt
+    assert "### Performance" in prompt
+    assert "04b6890 auto maximum use of gpu" in prompt
 
 
 def run(cmd: list[str], cwd: Path) -> str:
