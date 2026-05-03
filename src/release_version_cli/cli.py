@@ -10,7 +10,7 @@ from release_version_cli.git_ops import commit_tag_push, ensure_new_tag_absent, 
 from release_version_cli.github import create_release
 from release_version_cli.manifest import read_manifest, select_manifest, write_manifest_version
 
-
+#this is for the command line
 @click.command()
 @click.argument("part", type=click.Choice(["major", "minor", "patch"]))
 @click.option("--dry-run", is_flag=True, help="Preview release without mutating files, git, or GitHub.")
