@@ -6,6 +6,7 @@ from click.testing import CliRunner
 
 from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes
 from release_version_cli.cli import main
+from release_version_cli.github import _host_from_git_url
 
 
 def test_dry_run_previews_patch_release(tmp_path, monkeypatch):
@@ -43,6 +44,12 @@ def test_release_commits_manifest_bump_pushes_tag_and_creates_github_release(tmp
     assert run(["git", "ls-remote", "--tags", "origin", "v0.3.5"], repo)
     assert "release create v0.3.5 --title v0.3.5 --notes-file" in gh_log.read_text()
     assert "--latest" in gh_log.read_text()
+
+
+def test_git_remote_host_parsing_supports_github_url_shapes():
+    assert _host_from_git_url("https://github.com/vivasvan1/release-version-cli.git") == "github.com"
+    assert _host_from_git_url("git@github.eagleview.com:org/repo.git") == "github.eagleview.com"
+    assert _host_from_git_url("/tmp/origin.git") is None
 
 
 def test_requires_file_when_both_manifests_exist(tmp_path, monkeypatch):
