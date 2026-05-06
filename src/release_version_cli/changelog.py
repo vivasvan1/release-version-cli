@@ -2,21 +2,46 @@ from __future__ import annotations
 
 import re
 import subprocess
+from dataclasses import dataclass
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
+@dataclass(frozen=True)
+class ReleaseNotesResult:
+    notes: str
+    ollama_warning: str | None = None
+    ollama_prompt: str | None = None
+
+
 def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> str:
+    return build_release_notes_result(commits, model=model, use_ai=use_ai).notes
+
+
+def build_release_notes_result(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> ReleaseNotesResult:
     change_commits = _change_commits(commits)
     changes = ""
+    warning = None
+    prompt = None
     if use_ai and change_commits:
-        changes = _ollama_changes(change_commits, model)
+        ollama = _ollama_changes(change_commits, model)
+        changes = ollama.changes
+        warning = ollama.warning
+        prompt = ollama.prompt
     if not changes:
         changes = _deterministic_changes(change_commits)
-    return changes.rstrip() + "\n\n## Commits\n\n" + _commit_lines(commits) + "\n"
+    notes = changes.rstrip() + "\n\n## Commits\n\n" + _commit_lines(commits) + "\n"
+    return ReleaseNotesResult(notes=notes, ollama_warning=warning, ollama_prompt=prompt)
 
 
-def _ollama_changes(commits: list[str], model: str) -> str:
+@dataclass(frozen=True)
+class OllamaChangesResult:
+    changes: str
+    warning: str | None = None
+    prompt: str | None = None
+
+
+def _ollama_changes(commits: list[str], model: str) -> OllamaChangesResult:
     prompt = _ollama_prompt(commits)
     try:
         result = subprocess.run(
@@ -28,12 +53,17 @@ def _ollama_changes(commits: list[str], model: str) -> str:
             timeout=60,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
+    except OSError as exc:
+        return OllamaChangesResult("", f"ollama failed to start: {exc}", prompt)
+    except subprocess.TimeoutExpired as exc:
+        return OllamaChangesResult("", f"ollama timed out after {exc.timeout} seconds", prompt)
     output = _extract_changes_markdown(result.stdout)
-    if result.returncode != 0 or not output:
-        return ""
-    return output
+    if result.returncode != 0:
+        cause = result.stderr.strip() or result.stdout.strip() or f"ollama exited with code {result.returncode}"
+        return OllamaChangesResult("", cause, prompt)
+    if not output:
+        return OllamaChangesResult("", "ollama output did not include a ## Changes section", prompt)
+    return OllamaChangesResult(output)
 
 
 def _extract_changes_markdown(output: str) -> str:

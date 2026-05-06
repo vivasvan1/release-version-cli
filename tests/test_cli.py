@@ -1,5 +1,6 @@
 import os
 import subprocess
+from importlib.metadata import version
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -7,6 +8,13 @@ from click.testing import CliRunner
 from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes
 from release_version_cli.cli import main
 from release_version_cli.github import _host_from_git_url
+
+
+def test_version_flags_print_installed_package_version():
+    expected = f"release-version, version {version('release-version-cli')}\n"
+
+    assert CliRunner().invoke(main, ["--version"]).output == expected
+    assert CliRunner().invoke(main, ["-v"]).output == expected
 
 
 def test_dry_run_previews_patch_release(tmp_path, monkeypatch):
@@ -44,6 +52,27 @@ def test_release_commits_manifest_bump_pushes_tag_and_creates_github_release(tmp
     assert run(["git", "ls-remote", "--tags", "origin", "v0.3.5"], repo)
     assert "release create v0.3.5 --title v0.3.5 --notes-file" in gh_log.read_text()
     assert "--latest" in gh_log.read_text()
+
+
+def test_release_can_prepend_notes_when_github_release_already_exists(tmp_path, monkeypatch):
+    repo = make_python_repo(tmp_path, version="0.3.4", tag="v0.3.4")
+    commit(repo, "fix: update existing github release")
+    push(repo)
+    gh_log = install_fake_existing_release_gh(tmp_path, monkeypatch)
+    monkeypatch.chdir(repo)
+
+    result = CliRunner().invoke(main, ["patch", "--yes", "--no-ai"], input="start\n", catch_exceptions=False)
+
+    assert result.exit_code == 0
+    assert "GitHub release v0.3.5 already exists" in result.output
+    assert "Updated existing GitHub release v0.3.5" in result.output
+    log = gh_log.read_text()
+    assert "release view v0.3.5 --json body --jq .body" in log
+    assert "release edit v0.3.5 --title v0.3.5 --notes-file" in log
+    assert "--latest" in log
+    notes_path = tmp_path / "edited-notes.md"
+    edited_notes = notes_path.read_text()
+    assert edited_notes.index("Update existing github release") < edited_notes.index("Existing release notes")
 
 
 def test_git_remote_host_parsing_supports_github_url_shapes():
@@ -109,6 +138,10 @@ def test_ollama_failure_falls_back_to_deterministic_notes(tmp_path, monkeypatch)
     assert "### Fixes" in result.output
     assert "Handle ollama outage" in result.output
     assert "fix: handle ollama outage" in result.output
+    assert "WARNING: Ollama release notes failed; using deterministic fallback." in result.output
+    assert "Cause: ollama exited with code 1" in result.output
+    assert "===PROMPT===\n" in result.output
+    assert "===PROMPT END===" in result.output
 
 
 def test_ollama_prompt_asks_for_human_release_notes_without_release_bookkeeping():
@@ -203,6 +236,35 @@ def install_fake_gh(tmp_path: Path, monkeypatch) -> Path:
     gh.write_text(
         "#!/bin/sh\n"
         f"echo \"$@\" >> {log}\n"
+        "exit 0\n"
+    )
+    gh.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return log
+
+
+def install_fake_existing_release_gh(tmp_path: Path, monkeypatch) -> Path:
+    log = tmp_path / "gh-existing.log"
+    notes = tmp_path / "edited-notes.md"
+    bin_dir = tmp_path / "existing-gh-bin"
+    bin_dir.mkdir()
+    gh = bin_dir / "gh"
+    gh.write_text(
+        "#!/bin/sh\n"
+        f"echo \"$@\" >> {log}\n"
+        "if [ \"$1 $2 $3\" = \"release create v0.3.5\" ]; then\n"
+        "  echo 'HTTP 422: Validation Failed' >&2\n"
+        "  echo 'Release.tag_name already exists' >&2\n"
+        "  exit 1\n"
+        "fi\n"
+        "if [ \"$1 $2 $3\" = \"release view v0.3.5\" ]; then\n"
+        "  echo 'Existing release notes'\n"
+        "  exit 0\n"
+        "fi\n"
+        "if [ \"$1 $2 $3\" = \"release edit v0.3.5\" ]; then\n"
+        f"  cp \"$7\" {notes}\n"
+        "  exit 0\n"
+        "fi\n"
         "exit 0\n"
     )
     gh.chmod(0o755)
