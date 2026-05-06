@@ -20,6 +20,13 @@ from release_version_cli.manifest import read_manifest, select_manifest, write_m
 @click.option("--file", "manifest_file", type=click.Path(), help="Manifest file to bump.")
 @click.option("--cwd", "cwd", type=click.Path(file_okay=False), help="Working directory for manifest discovery.")
 @click.option("--ollama-model", default="gemma4", show_default=True, help="Ollama model for release notes.")
+@click.option(
+    "--ollama-timeout",
+    default=300,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Seconds to wait for Ollama release notes.",
+)
 @click.option("--no-ai", is_flag=True, help="Skip Ollama and use deterministic changelog.")
 def main(
     part: str,
@@ -29,10 +36,11 @@ def main(
     manifest_file: str | None,
     cwd: str | None,
     ollama_model: str,
+    ollama_timeout: int,
     no_ai: bool,
 ) -> None:
     try:
-        _main(part, dry_run, yes, initial, manifest_file, cwd, ollama_model, no_ai)
+        _main(part, dry_run, yes, initial, manifest_file, cwd, ollama_model, ollama_timeout, no_ai)
     except click.ClickException:
         raise
     except RuntimeError as exc:
@@ -47,6 +55,7 @@ def _main(
     manifest_file: str | None,
     cwd: str | None,
     ollama_model: str,
+    ollama_timeout: int,
     no_ai: bool,
 ) -> None:
     workdir = Path(cwd).resolve() if cwd else Path.cwd()
@@ -64,7 +73,12 @@ def _main(
 
     commits = log_commits(state.repo_root, state.previous_tag, "HEAD")
     commits = [f"<release> chore: release {new_version.tag}", *commits]
-    notes_result = build_release_notes_result(commits, model=ollama_model, use_ai=not no_ai)
+    notes_result = build_release_notes_result(
+        commits,
+        model=ollama_model,
+        use_ai=not no_ai,
+        timeout=ollama_timeout,
+    )
 
     _print_plan(manifest_path, manifest.version, new_version, state.previous_tag, state.branch, dry_run)
     _print_ollama_warning(notes_result)
@@ -80,7 +94,12 @@ def _main(
     write_manifest_version(manifest, new_version)
     commit_tag_push(state.repo_root, manifest.path, new_version, state.branch)
     final_commits = log_commits(state.repo_root, state.previous_tag, new_version.tag)
-    final_notes_result = build_release_notes_result(final_commits, model=ollama_model, use_ai=not no_ai)
+    final_notes_result = build_release_notes_result(
+        final_commits,
+        model=ollama_model,
+        use_ai=not no_ai,
+        timeout=ollama_timeout,
+    )
     _print_ollama_warning(final_notes_result)
 
     notes_file: Path | None = None

@@ -14,17 +14,22 @@ class ReleaseNotesResult:
     ollama_prompt: str | None = None
 
 
-def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> str:
-    return build_release_notes_result(commits, model=model, use_ai=use_ai).notes
+def build_release_notes(commits: list[str], model: str = "gemma4", use_ai: bool = True, timeout: int = 300) -> str:
+    return build_release_notes_result(commits, model=model, use_ai=use_ai, timeout=timeout).notes
 
 
-def build_release_notes_result(commits: list[str], model: str = "gemma4", use_ai: bool = True) -> ReleaseNotesResult:
+def build_release_notes_result(
+    commits: list[str],
+    model: str = "gemma4",
+    use_ai: bool = True,
+    timeout: int = 300,
+) -> ReleaseNotesResult:
     change_commits = _change_commits(commits)
     changes = ""
     warning = None
     prompt = None
     if use_ai and change_commits:
-        ollama = _ollama_changes(change_commits, model)
+        ollama = _ollama_changes(change_commits, model, timeout)
         changes = ollama.changes
         warning = ollama.warning
         prompt = ollama.prompt
@@ -41,7 +46,7 @@ class OllamaChangesResult:
     prompt: str | None = None
 
 
-def _ollama_changes(commits: list[str], model: str) -> OllamaChangesResult:
+def _ollama_changes(commits: list[str], model: str, timeout: int) -> OllamaChangesResult:
     prompt = _ollama_prompt(commits)
     try:
         result = subprocess.run(
@@ -50,7 +55,7 @@ def _ollama_changes(commits: list[str], model: str) -> OllamaChangesResult:
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=60,
+            timeout=timeout,
             check=False,
         )
     except OSError as exc:

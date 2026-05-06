@@ -5,7 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes
+from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes, build_release_notes_result
 from release_version_cli.cli import main
 from release_version_cli.github import _host_from_git_url
 
@@ -15,6 +15,13 @@ def test_version_flags_print_installed_package_version():
 
     assert CliRunner().invoke(main, ["--version"]).output == expected
     assert CliRunner().invoke(main, ["-v"]).output == expected
+
+
+def test_help_includes_ollama_timeout_option():
+    result = CliRunner().invoke(main, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--ollama-timeout INTEGER RANGE" in result.output
 
 
 def test_dry_run_previews_patch_release(tmp_path, monkeypatch):
@@ -142,6 +149,22 @@ def test_ollama_failure_falls_back_to_deterministic_notes(tmp_path, monkeypatch)
     assert "Cause: ollama exited with code 1" in result.output
     assert "===PROMPT===\n" in result.output
     assert "===PROMPT END===" in result.output
+
+
+def test_ollama_timeout_is_configurable(monkeypatch):
+    captured = {}
+
+    def timeout_run(*args, **kwargs):
+        captured["timeout"] = kwargs["timeout"]
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"])
+
+    monkeypatch.setattr("release_version_cli.changelog.subprocess.run", timeout_run)
+
+    result = build_release_notes_result(["1234567 fix: slow ollama model"], timeout=123)
+
+    assert captured["timeout"] == 123
+    assert result.ollama_warning == "ollama timed out after 123 seconds"
+    assert "Slow ollama model" in result.notes
 
 
 def test_ollama_prompt_asks_for_human_release_notes_without_release_bookkeeping():
