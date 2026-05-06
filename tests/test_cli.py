@@ -1,5 +1,6 @@
 import os
 import subprocess
+from io import StringIO
 from importlib.metadata import version
 from pathlib import Path
 
@@ -8,6 +9,12 @@ from click.testing import CliRunner
 from release_version_cli.changelog import _extract_changes_markdown, _ollama_prompt, build_release_notes, build_release_notes_result
 from release_version_cli.cli import main
 from release_version_cli.github import _host_from_git_url
+from release_version_cli.progress import DOT_FRAMES, StatusSpinner
+
+
+class TtyStringIO(StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 def test_version_flags_print_installed_package_version():
@@ -22,6 +29,16 @@ def test_help_includes_ollama_timeout_option():
 
     assert result.exit_code == 0
     assert "--ollama-timeout INTEGER RANGE" in result.output
+
+
+def test_status_spinner_uses_six_dot_frame():
+    stream = TtyStringIO()
+    spinner = StatusSpinner("Running ollama", stream=stream)
+
+    spinner._write_frame(DOT_FRAMES[-1])
+
+    assert DOT_FRAMES[-1] == "......"
+    assert "Running ollama ......" in stream.getvalue()
 
 
 def test_dry_run_previews_patch_release(tmp_path, monkeypatch):
