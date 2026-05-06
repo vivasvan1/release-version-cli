@@ -55,9 +55,5 @@ GitHub Actions publishes tagged releases with uv. Push a strict `vX.Y.Z` tag
 that matches `[project].version` in `pyproject.toml`, or run the `Publish`
 workflow manually with that tag.
 
-PyPI trusted publishing must be configured for:
-
-- Owner: `vivasvan1`
-- Repository: `release-version-cli`
-- Workflow: `publish.yml`
-- Environment: `pypi`
+Configure a GitHub repository secret named `PYPI_API_TOKEN` with a PyPI API
+token for this project.
